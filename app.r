@@ -1,7 +1,41 @@
 library(shiny)
+library(tidyverse)
+library(rvest)
+library(googlesheets4)
+
+gs4_deauth()
+
+setwd("./")
+
+url <-  "https://www.barranquilla.gov.co/descubre/conoce-a-barranquilla/territorio"
+
+
+df <- url %>% 
+  read_html() %>% 
+  html_nodes("table") %>% 
+  html_table(fill = T) %>% 
+  lapply(., function(x) setNames(x, c("Barrios", "Barrios2")))
+
+# combine all data frames into one
+df <- do.call(rbind, df)
+
+#create a list
+barrios <- df$Barrios %>% 
+  strsplit(split = ",") %>% 
+  unlist()
+
+barrios2 <- df$Barrios2 %>%
+    strsplit(split = ",") %>% 
+    unlist()
+
+    # combine list into one
+    barrios <- c(barrios, barrios2)
+
+
+
 
 # which fields get saved 
-fieldsAll <- c("name", "poblacion")
+fieldsAll <- c("name", "poblacion", "r_num_years")
 
 # which fields are mandatory
 fieldsMandatory <- c("name", "poblacion")
@@ -31,21 +65,20 @@ saveData <- function(data) {
                       humanTime(),
                       digest::digest(data))
   
-  write.csv(x = data, file = file.path(responsesDir, fileName),
+  write.csv2(x = data, file = file.path(responsesDir, fileName),
             row.names = FALSE, quote = TRUE)
 }
-
 # load all responses into a data.frame
 loadData <- function() {
   files <- list.files(file.path(responsesDir), full.names = TRUE)
-  data <- lapply(files, read.csv, stringsAsFactors = FALSE)
+  data <- lapply(files, read.csv2, stringsAsFactors = FALSE)
   #data <- dplyr::rbind_all(data)
   data <- do.call(rbind, data)
   data
 }
 
 # directory where responses get stored
-responsesDir <- file.path("responses")
+responsesDir <- file.path("./responses/")
 
 # CSS to use in the app
 appCSS <-
@@ -58,15 +91,13 @@ appCSS <-
   "
 
 # usernames that are admins
-adminUsers <- c("lasagna")
+adminUsers <- c("admin", "prof", "lasagna0")
 
 # info for sharing this app on facebook/twitter
 share <- list(
-  title = "",
-  url = "http://daattali.com/shiny/mimic-google-form/",
-  image = "http://daattali.com/shiny/img/mimic.png",
-  description = "Learn how to create a Shiny app that allows users to submit responses to a form. Submissions get stored permanently and can be loaded back into the app.",
-  twitter_user = "daattali"
+  title = "Fundaciones que intervienen a poblaciones vulnerables de Barranquilla",
+  url = "https://github.com/lasagna0",
+  description = "Sistema de recopilación de datos de Probarranquilla – Gerencia de Información y Datos"
 )
 
 shinyApp(
@@ -75,7 +106,7 @@ shinyApp(
     shinyjs::inlineCSS(appCSS),
     title = "Fundaciones que intervienen a poblaciones vulnerables de Barranquilla",
     tags$head(
-      tags$link(rel = "shortcut icon", type="image/x-icon", href="http://daattali.com/shiny/img/favicon.ico"),
+      tags$link(rel = "shortcut icon", type="image/x-icon", href="https://raw.githubusercontent.com/lasagna0/Sistemadedatos/main/4gRzmK13_400x400.jpg?token=GHSAT0AAAAAABZOZX5N4UCIMA5ZON3WJCXCYZ2A32Q"),
 
       # Facebook OpenGraph tags
       tags$meta(property = "og:title", content = share$title),
@@ -92,39 +123,21 @@ shinyApp(
       tags$meta(name = "twitter:description", content = share$description),
       tags$meta(name = "twitter:image", content = share$image)
     ),
-    tags$a(
-      href="https://github.com/daattali/shiny-server/tree/master/mimic-google-form",
-      tags$img(style="position: absolute; top: 0; right: 0; border: 0;",
-               src="github-green-right.png",
-               alt="Fork me on GitHub")
-    ),
+    
     div(id = "header",
-      h1("Mimicking a Google Form with a Shiny app"),
-      h4("This app is a supplement to my",
-         a(href = "http://deanattali.com/2015/06/14/mimicking-google-form-shiny/",
-           "blog post on the topic")
+      h1("Fundaciones que intervienen a poblaciones vulnerables de Barranquilla"),
+      h4("Sistema de recopilación de datos de Probarranquilla – Gerencia de Información y Datos")
       ),
-      strong( 
-      span("Created by "),
-      a("Dean Attali", href = "http://deanattali.com"),
-      HTML("&bull;"),
-      span("Code"),
-      a("on GitHub", href = "https://github.com/daattali/shiny-server/tree/master/mimic-google-form"),
-      HTML("&bull;"),
-      a("More apps", href = "http://daattali.com/shiny/"), "by Dean")
-    ),
     
     fluidRow(
       column(6,
         div(
           id = "form",
           
-          textInput("name", labelMandatory("Name"), ""),
-          textInput("favourite_pkg", labelMandatory("Favourite R package")),
-          checkboxInput("used_shiny", "I've built a Shiny app in R before", FALSE),
-          sliderInput("r_num_years", "Number of years using R", 0, 25, 2, ticks = FALSE),
-          selectInput("os_type", "Operating system used most frequently",
-                      c("",  "Windows", "Mac", "Linux")),
+          textInput("name", labelMandatory("Nombre de la fundación"), ""),
+          sliderInput("r_num_years", "Numero de años que ha intervenido", 0, 25, 0, ticks = FALSE),
+          selectInput("poblacion", "Barrio que interviene",
+                     barrios, multiple = T),
           actionButton("submit", "Submit", class = "btn-primary"),
           
           shinyjs::hidden(
@@ -138,13 +151,9 @@ shinyApp(
         shinyjs::hidden(
           div(
             id = "thankyou_msg",
-            h3("Thanks, your response was submitted successfully!"),
-            actionLink("submit_another", "Submit another response")
+            h3("Gracias por tu respuesta!  #YoSoyProBarranquilla ")
           )
         )
-      ),
-      column(6,
-        uiOutput("adminPanelContainer")
       )
     )
   ),
@@ -163,6 +172,12 @@ shinyApp(
       shinyjs::toggleState(id = "submit", condition = mandatoryFilled)
     })
     
+
+# put input separeted by commas
+    reactive({
+      input$poblacion <- paste(input$poblacion, collapse = ", ")
+    })
+
     # Gather all the form inputs (and add timestamp)
     formData <- reactive({
       data <- sapply(fieldsAll, function(x) input[[x]])
@@ -203,38 +218,18 @@ shinyApp(
     })
     
     # render the admin panel
-    output$adminPanelContainer <- renderUI({
-      if (!isAdmin()) return()
-      
-      div(
-        id = "adminPanel",
-        h2("Previous responses (only visible to admins)"),
-        downloadButton("downloadBtn", "Download responses"), br(), br(),
-        DT::dataTableOutput("responsesTable"), br(),
-        "* There were over 2000 responses by Dec 4 2017, so all data prior to that date was deleted as a cleanup"
-      )
-    })
+
     
     # determine if current user is admin
-    isAdmin <- reactive({
-      is.null(session$user) || session$user %in% adminUsers
-    })    
+
     
     # Show the responses in the admin table
-    output$responsesTable <- DT::renderDataTable({
-      data <- loadData()
-      data$timestamp <- as.POSIXct(data$timestamp, origin="1970-01-01")
-      DT::datatable(
-        data,
-        rownames = FALSE,
-        options = list(searching = FALSE, lengthChange = FALSE)
-      )
-    })
+    
     
     # Allow user to download responses
     output$downloadBtn <- downloadHandler(
       filename = function() { 
-        sprintf("mimic-google-form_%s.csv", humanTime())
+        sprintf("datos.csv", humanTime())
       },
       content = function(file) {
         write.csv(loadData(), file, row.names = FALSE)
@@ -242,3 +237,7 @@ shinyApp(
     )    
   }
 )
+
+
+# save shinny app to a file
+saveApp(app, "app.R")
